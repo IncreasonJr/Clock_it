@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum AttendanceMethod {
+  MANUAL
+  FACE_GEO
+  GEO_ONLY
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  ABSENT
+  HALF_DAY
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  plan      Plan     @default(FREE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users             User[]
+  departments       Department[]
+  staffProfiles     StaffProfile[]
+  attendanceRecords AttendanceRecord[]
+  faceEmbeddings    FaceEmbedding[]
+  auditLogs         AuditLog[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  orgId        String
+  email        String
+  passwordHash String?
+  name         String
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  staffProfile StaffProfile?
+  auditLogs    AuditLog[]
+
+  @@unique([orgId, email])
+  @@index([orgId])
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  staffProfiles StaffProfile[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model StaffProfile {
+  id           String    @id @default(cuid())
+  userId       String    @unique
+  orgId        String
+  employeeCode String
+  departmentId String?
+  position     String
+  hireDate     DateTime
+  phone        String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  department        Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  attendanceRecords AttendanceRecord[]
+  faceEmbeddings    FaceEmbedding[]
+
+  @@unique([orgId, employeeCode])
+  @@index([orgId])
+  @@index([departmentId])
+}
+
+model AttendanceRecord {
+  id             String           @id @default(cuid())
+  orgId          String
+  staffProfileId String
+  checkInAt      DateTime
+  checkOutAt     DateTime?
+  checkInLat     Float
+  checkInLng     Float
+  checkOutLat    Float?
+  checkOutLng    Float?
+  method         AttendanceMethod @default(MANUAL)
+  status         AttendanceStatus @default(PRESENT)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  staffProfile StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, staffProfileId, checkInAt])
+}
+
+model FaceEmbedding {
+  id             String   @id @default(cuid())
+  staffProfileId String
+  orgId          String
+  embedding      Json
+  modelVersion   String
+  createdAt      DateTime @default(now())
+
+  staffProfile StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+
+  @@index([orgId])
+  @@index([staffProfileId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([orgId, createdAt])
+  @@index([userId])
+}
